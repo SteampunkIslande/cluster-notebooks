@@ -1,0 +1,16 @@
+Bootstrap: docker
+From: python:3.12-slim-bullseye
+
+%files
+    entrypoint.sh /usr/bin/entrypoint.sh
+
+# Install the required packages
+%post
+    pip install uv
+    uv pip install --system -U notebook
+
+%test
+    openssl rand -hex 16
+    python --version
+    /usr/bin/which entrypoint.sh
+
