@@ -53,7 +53,7 @@ Ce programme va lancer sbatch (en coulisses). Vous pouvez spécifier les options
 
 Si l'option `--job-name` n'est pas spécifiée, un nom de job sera demandé à l'utilisateur dans une optique de traçabilité. L'utilisateur doit expliciter le nom et le type du projet qui l'amène à utiliser jupyter notebook. Le nom est libre, mais doit être suffisament explicite.
 
-### Options spécifiques
+## Options spécifiques
 
 Si vous souhaitez voir votre notebook exécuté dans un dossier en particulier, précisez-le avec l'option `--directory`.
 
