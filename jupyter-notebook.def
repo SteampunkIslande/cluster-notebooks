@@ -7,7 +7,7 @@ From: python:3.12-slim-bullseye
 # Install the required packages
 %post
     pip install uv
-    uv pip install --system -U notebook duckdb polars
+    uv pip install --system -U notebook duckdb polars pyarrow ipywidgets
 
 %test
     openssl rand -hex 16
