@@ -1,3 +1,4 @@
+use anyhow::Context;
 use clap::Parser;
 use inquire::{Confirm, Text, validator::Validation};
 use std::io::{BufRead, Write};
@@ -72,7 +73,7 @@ fn check_squeue_status(job_id: u64) -> SqueueStatus {
         .unwrap_or_default()
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let args = SlurmNoteBookArgs::parse();
     let SlurmNoteBookArgs {
         job_name,
@@ -125,9 +126,9 @@ fn main() {
         .arg(&mem)
         .arg("-A") // Account
         .arg("recherche")
-        .arg("nodes") // Nombre de noeuds
+        .arg("--nodes") // Nombre de noeuds
         .arg("1")
-        .arg("ntasks") // Nombre de tâches
+        .arg("--ntasks") // Nombre de tâches
         .arg("1");
 
     // Ressources génériques (cas particulier)
@@ -155,25 +156,29 @@ fn main() {
         if !Path::exists(&usermail_filename) {
             if Confirm::new("Voulez-vous ajouter votre adresse mail dans $HOME/.usermail afin d'être notifié pour les événements vous concernant ?").prompt().is_ok_and(|x|x)
             {
-                std::fs::File::create(&usermail_filename).map(|mut f|std::write!(&mut f,"{}",Text::new("Veuillez entrer votre adresse mail").prompt().expect("Vous n'avez pas entré d'adresse mail, rien n'a été fait.") )).flatten().expect("Impossible de sauvegarder l'adresse mail utilisateur");
+                std::fs::File::create(&usermail_filename).map(|mut f|std::write!(&mut f,"{}",Text::new("Veuillez entrer votre adresse mail").prompt().expect("Vous n'avez pas entré d'adresse mail, rien n'a été fait.") )).flatten().with_context(||"Impossible de sauvegarder l'adresse mail utilisateur")?;
             }
         }
     }
 
-    let cmd_res = cmd.output().expect("Impossible d'invoquer sbatch");
+    let cmd_res = cmd
+        .output()
+        .with_context(|| "Impossible d'invoquer sbatch")?;
 
     if !cmd_res.status.success() {
-        panic!(
+        anyhow::bail!(
             "Erreur lors de la soumission du script sbatch: {}",
             String::from_utf8_lossy(&cmd_res.stderr)
         );
     } else {
         let job_id: u64 = String::from_utf8_lossy(&cmd_res.stdout)
             .parse()
-            .expect(&format!(
-                "Impossible de convertir en entier non signé 64 bits l'ID de job SLURM `{}`",
-                String::from_utf8_lossy(&cmd_res.stdout)
-            ));
+            .with_context(|| {
+                format!(
+                    "Impossible de convertir en entier non signé 64 bits l'ID de job SLURM `{}`",
+                    String::from_utf8_lossy(&cmd_res.stdout)
+                )
+            })?;
         println!(
             "Votre job a été soumis avec l'ID `{}`, veuillez patienter. Le temps d'attente peut varier selon la charge du cluster et la quantité de ressources demandée.\n",
             job_id
@@ -208,9 +213,8 @@ fn main() {
                     println!(
                     "Votre notebook est disponible à l'adresse suivante:\n{}",
                     std::fs::File::open(&format!("/OPT/notebooks/running/notebook-{job_id}"))
-                        .map(std::io::BufReader::new).map(|f|f.lines().filter_map(|l|l.ok()).collect::<Vec<_>>().join("\n")).expect(&format!(
-                    "Le fichier /OPT/notebooks/running/notebook-{job_id}.execinfo n'existe pas!"
-                ))
+                        .map(std::io::BufReader::new).map(|f|f.lines().filter_map(|l|l.ok()).collect::<Vec<_>>().join("\n")).with_context(||{
+                            format!("Le fichier /OPT/notebooks/running/notebook-{job_id}.execinfo n'existe pas!")})?
                 );
                     break;
                 }
@@ -223,5 +227,6 @@ fn main() {
                 }
             }
         }
+        Ok(())
     }
 }

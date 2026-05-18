@@ -97,9 +97,9 @@ Un dossier partagé en NFS, nommé `/OPT`, accessible par tous les noeuds au mê
 
 `mkdir -p /OPT/notebooks/{batch-scripts,running,logs}`
 
-Un dossier partagé en NFS, nommé `/SINGULARITIES`, accessible par tous les noeuds au même chemin:
+Un dossier partagé en NFS, nommé `/SINGULARITIES`, accessible par tous les noeuds au même chemin.
 
-`/SINGULARITIES`. Ce dossier doit contenir au moins un fichier nommé `/SINGULARITIES/jupyter-notebook-base.sif`.
+Ce dossier doit contenir au moins un fichier nommé `/SINGULARITIES/jupyter-notebook-base.sif`.
 
 ## Les fichiers requis
 

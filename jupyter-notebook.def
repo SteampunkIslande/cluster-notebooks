@@ -9,6 +9,9 @@ From: python:3.12-slim-bullseye
     pip install uv
     uv pip install --system -U notebook duckdb polars pyarrow ipywidgets
 
+%startscript
+    /usr/bin/entrypoint.sh
+
 %test
     openssl rand -hex 16
     python --version

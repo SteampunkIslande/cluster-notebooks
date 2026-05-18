@@ -6,10 +6,15 @@ SIF_FILE=${SIF_FILE:-"jupyter-notebook-base"}
 
 SIF_FILE=/SINGULARITIES/${SIF_FILE}.sif
 
+INSTANCE_NAME="notebook-${SLURM_JOB_ID}"
+
 [[ ! -f "${SIF_FILE}" ]] && { echo "${SIF_FILE} n'existe pas, rien n'a été lancé!"; exit 1; }
 
-# Lancer le conteneur
-singularity exec -B "$PWD" -B /OPT/notebooks "${SIF_FILE}" entrypoint.sh
+cleanup() {
+    singularity instance stop "${INSTANCE_NAME}"
+    rm -f "$execinfo"
+}
+trap cleanup EXIT INT TERM
 
 send_email(){
     
@@ -33,8 +38,15 @@ send_email(){
     } | sendmail -t
     
 }
-# Notification
 
+# Lancer le conteneur
+singularity instance start -B "$PWD" -B /OPT/notebooks "${SIF_FILE}" "${INSTANCE_NAME}"
+
+# Attendre 5 secondes que le point d'entrée ait démarré le notebook (soit le temps de trouver un port disponible)
+# Nous sommes dans le contexte d'un script sbatch donc déjà alloué, pas besoin d'attendre l'allocation des ressources.
+sleep 5
+
+# Notification (si une adresse mail a été définie pour cet utilisateur)
 if [[ -f $HOME/.usermail ]];then
     USER_MAIL="$(cat $HOME/.usermail | head -n1)"
     
