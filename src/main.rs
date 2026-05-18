@@ -3,6 +3,7 @@ use clap::Parser;
 use inquire::{Confirm, Text, validator::Validation};
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{path::Path, process::Command};
@@ -44,6 +45,10 @@ struct SlurmNoteBookArgs {
     /// Dossier d'exécution du notebook. Par défaut, `$PWD`.
     #[arg(long)]
     directory: Option<PathBuf>,
+
+    /// Chemin vers le fichier batch à exécuter. Valeur par défaut: `/OPT/notebooks/batch-scripts/notebook.sbatch`
+    #[arg(long)]
+    batch_script: Option<PathBuf>,
 }
 
 #[derive(Default, Debug)]
@@ -84,6 +89,7 @@ fn main() -> anyhow::Result<()> {
         node,
         image,
         directory,
+        batch_script,
     } = args;
 
     if let Some(d) = directory {
@@ -161,6 +167,12 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
+    // Ajouter le chemin vers le batch script à lancer
+    let batch_script = batch_script.unwrap_or(PathBuf::from_str(
+        "/OPT/notebooks/batch-scripts/notebook.sbatch",
+    )?);
+    cmd.arg(batch_script);
+
     let cmd_res = cmd
         .output()
         .with_context(|| "Impossible d'invoquer sbatch")?;
@@ -172,6 +184,7 @@ fn main() -> anyhow::Result<()> {
         );
     } else {
         let job_id: u64 = String::from_utf8_lossy(&cmd_res.stdout)
+            .trim()
             .parse()
             .with_context(|| {
                 format!(
