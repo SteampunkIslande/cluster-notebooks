@@ -161,13 +161,12 @@ fn main() -> anyhow::Result<()> {
 
     if let Ok(home_dir) = std::env::var("HOME") {
         let usermail_filename = Path::new(&home_dir).join(".usermail");
-        if !Path::exists(&usermail_filename) {
-            if Confirm::new("Voulez-vous ajouter votre adresse mail dans $HOME/.usermail afin d'être notifié pour les événements vous concernant ?").prompt().is_ok_and(|x|x)
+        if !Path::exists(&usermail_filename)
+            && Confirm::new("Voulez-vous ajouter votre adresse mail dans $HOME/.usermail afin d'être notifié pour les événements vous concernant ?").prompt().is_ok_and(|x|x)
             {
                 let mut f = std::fs::File::create(&usermail_filename)?;
                 std::write!(&mut f,"{}",Text::new("Veuillez entrer votre adresse mail").prompt().with_context(||"Vous n'avez pas entré d'adresse mail, rien n'a été fait.")?).with_context(||"Impossible de sauvegarder l'adresse mail utilisateur")?;
             }
-        }
     }
 
     // Ajouter le chemin vers le batch script à lancer
@@ -233,8 +232,8 @@ fn main() -> anyhow::Result<()> {
                 SqueueStatus::Running => {
                     println!(
                     "Votre notebook est disponible à l'adresse suivante:\n{}",
-                    std::fs::File::open(&format!("/OPT/notebooks/running/notebook-{job_id}"))
-                        .map(std::io::BufReader::new).map(|f|f.lines().filter_map(|l|l.ok()).collect::<Vec<_>>().join("\n")).with_context(||{
+                    std::fs::File::open(format!("/OPT/notebooks/running/notebook-{job_id}"))
+                        .map(std::io::BufReader::new).map(|f|f.lines().map_while(Result::ok).collect::<Vec<_>>().join("\n")).with_context(||{
                             format!("Le fichier /OPT/notebooks/running/notebook-{job_id}.execinfo n'existe pas!")})?
                 );
                     break;
