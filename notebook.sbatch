@@ -35,7 +35,7 @@ send_email(){
         echo
         cat "$CONTENT"
         echo
-    } | sendmail -t
+    } | /usr/sbin/sendmail -t
     
 }
 
@@ -52,22 +52,15 @@ if [[ -f $HOME/.usermail ]];then
     
     if [[ -n $USER_MAIL && -f "/OPT/notebooks/running/notebook-${SLURM_JOB_ID}.execinfo" ]]; then
         mail_content=$(mktemp)
-        echo "Votre notebook est disponible jusqu'à $(date -d @$SLURM_JOB_END_TIME)" > $mail_content
+        echo "Votre notebook est disponible jusqu'à $(squeue -j $SLURM_JOB_ID -o '%e' -h)</br>" > $mail_content
         
         notebook_url=$(cat "/OPT/notebooks/running/notebook-${SLURM_JOB_ID}.execinfo")
         echo "Vous pouvez y accéder à l'adresse suivante: <a href="${notebook_url}" />" >> $mail_content
         
-        echo "Si vous voulez arrêter son exécution et ainsi économiser des ressources, vous pouvez l'arrêter avec la commande suivante:</br>"
+        echo "Si vous voulez arrêter son exécution et ainsi économiser des ressources, vous pouvez l'arrêter avec la commande suivante (assurez-vous d'avoir sauvegardé avant):</br>"
         echo "<code>scancel $SLURM_JOB_ID</code>"
         
         send_email $USER_MAIL "Notebook prêt ($SLURM_JOB_NAME)" $mail_content
         rm $mail_content
     fi
-fi
-
-if [[ $(( $SLURM_JOB_END_TIME - $SLURM_JOB_START_TIME )) -ge 86400 ]];then
-    mail_content=$(mktemp)
-    echo "$USER a demandé un notebook pour une durée supérieure à 24 heures" > $mail_content
-    send_email charles.monod-broca@aphp.fr "Notebook - Allocation longue" >$mail_content
-    rm $mail_content
 fi
