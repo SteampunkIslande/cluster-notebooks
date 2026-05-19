@@ -35,6 +35,8 @@ CHILD_PID=""
 
 cleanup() {
     
+    trap - EXIT INT TERM
+    
     echo "[CLEANUP] Début du nettoyage"
     
     #
@@ -71,7 +73,13 @@ cleanup() {
     echo "[CLEANUP] Fin"
 }
 
-trap cleanup EXIT INT TERM
+on_term() {
+    cleanup
+    exit 143
+}
+
+trap cleanup EXIT
+trap on_term INT TERM
 
 #
 # Envoi mail
