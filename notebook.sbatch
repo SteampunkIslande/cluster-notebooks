@@ -107,7 +107,7 @@ send_email() {
         echo
         cat "${CONTENT_FILE}"
         echo
-    } | /usr/sbin/sendmail -v -t
+    } | ssh p01 /usr/sbin/sendmail -t
     
     echo "[MAIL] sendmail terminé"
 }
