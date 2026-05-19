@@ -2,68 +2,238 @@
 #SBATCH --output=/OPT/notebooks/logs/notebook-%j.out
 #SBATCH --error=/OPT/notebooks/logs/notebook-%j.err
 
-SIF_FILE=${SIF_FILE:-"jupyter-notebook-base"}
+set -euo pipefail
 
-SIF_FILE=/SINGULARITIES/${SIF_FILE}.sif
+#
+# Configuration
+#
 
-[[ ! -f "${SIF_FILE}" ]] && { echo "${SIF_FILE} n'existe pas, rien n'a été lancé!"; exit 1; }
+SIF_FILE="${SIF_FILE:-jupyter-notebook-base}"
+SIF_FILE="/SINGULARITIES/${SIF_FILE}.sif"
+
+EXECINFO="/OPT/notebooks/running/notebook-${SLURM_JOB_ID}.execinfo"
+
+#
+# Vérifications
+#
+
+if [[ ! -f "${SIF_FILE}" ]]; then
+    echo "Image Singularity absente: ${SIF_FILE}"
+    exit 1
+fi
+
+#
+# Variables globales
+#
+
+WATCHER_PID=""
+CHILD_PID=""
+
+#
+# Cleanup
+#
 
 cleanup() {
-    rm -f "$execinfo"
+    
+    echo "[CLEANUP] Début du nettoyage"
+    
+    #
+    # Arrêt du watcher
+    #
+    
+    if [[ -n "${WATCHER_PID}" ]]; then
+        if kill -0 "${WATCHER_PID}" 2>/dev/null; then
+            echo "[CLEANUP] Arrêt du watcher (${WATCHER_PID})"
+            kill "${WATCHER_PID}" 2>/dev/null || true
+        fi
+    fi
+    
+    #
+    # Arrêt du conteneur si encore vivant
+    #
+    
+    if [[ -n "${CHILD_PID}" ]]; then
+        if kill -0 "${CHILD_PID}" 2>/dev/null; then
+            echo "[CLEANUP] Arrêt du notebook (${CHILD_PID})"
+            kill "${CHILD_PID}" 2>/dev/null || true
+        fi
+    fi
+    
+    #
+    # Suppression du fichier execinfo
+    #
+    
+    if [[ -f "${EXECINFO}" ]]; then
+        echo "[CLEANUP] Suppression ${EXECINFO}"
+        rm -f "${EXECINFO}"
+    fi
+    
+    echo "[CLEANUP] Fin"
 }
+
 trap cleanup EXIT INT TERM
 
-send_email(){
+#
+# Envoi mail
+#
+
+send_email() {
     
-    TO_EMAIL="$1"
-    MAIL_SUBJECT="$2"
-    CONTENT="$3"
+    local TO_EMAIL="$1"
+    local MAIL_SUBJECT="$2"
+    local CONTENT_FILE="$3"
     
-    [ -z "$TO_EMAIL" ] && { echo "Pas d'adresse mail de destinataire définie"; exit 0; }
-    [ -z "$MAIL_SUBJECT" ] && { echo "Pas de sujet défini"; exit 0; }
-    [ ! -f "$CONTENT" ] && { echo "Pas de contenu";exit 0; }
+    if [[ -z "${TO_EMAIL}" ]]; then
+        echo "[MAIL] Adresse mail vide"
+        return 1
+    fi
     
-    ENCODED_SUBJECT=$(printf "%s" "$MAIL_SUBJECT" | base64)
+    if [[ ! -f "${CONTENT_FILE}" ]]; then
+        echo "[MAIL] Contenu introuvable"
+        return 1
+    fi
+    
+    local ENCODED_SUBJECT
+    ENCODED_SUBJECT=$(printf "%s" "${MAIL_SUBJECT}" | base64)
+    
+    echo "[MAIL] Envoi vers ${TO_EMAIL}"
+    
     {
-        echo "To: $TO_EMAIL"
-        echo "Subject: =?UTF-8?B?$ENCODED_SUBJECT?="
+        echo "To: ${TO_EMAIL}"
+        echo "Subject: =?UTF-8?B?${ENCODED_SUBJECT}?="
         echo "MIME-Version: 1.0"
         echo "Content-Type: text/html; charset=UTF-8"
+        echo "Content-Transfer-Encoding: 8bit"
         echo
-        cat "$CONTENT"
+        cat "${CONTENT_FILE}"
         echo
-    } | /usr/sbin/sendmail -t
+    } | /usr/sbin/sendmail -v -t
     
+    echo "[MAIL] sendmail terminé"
 }
 
-(
-    timeout=60
-    while [[ $timeout -gt 0 ]]; do
-        if [[ -f "$execinfo" ]]; then
-            if [[ -f "$HOME/.usermail" ]]; then
-                USER_MAIL="$(head -n1 "$HOME/.usermail")"
-                if [[ -n "$USER_MAIL" ]]; then
-                    notebook_url=$(cat "$execinfo")
-                    mail_content=$(mktemp)
+#
+# Watcher notebook
+#
+
+watcher() {
+    
+    local timeout=60
+    
+    echo "[WATCHER] Attente du notebook..."
+    
+    while [[ ${timeout} -gt 0 ]]; do
+        #
+        # Notebook prêt
+        #
+        
+        if [[ -f "${EXECINFO}" ]]; then
+            
+            echo "[WATCHER] Notebook détecté"
+            
+            #
+            # Adresse mail utilisateur
+            #
+            
+            if [[ -f "${HOME}/.usermail" ]]; then
+                
+                USER_MAIL="$(head -n1 "${HOME}/.usermail")"
+                
+                if [[ -n "${USER_MAIL}" ]]; then
+                    
+                    echo "[WATCHER] Destinataire: ${USER_MAIL}"
+                    
+                    NOTEBOOK_URL="$(cat "${EXECINFO}")"
+                    
+                    MAIL_CONTENT="$(mktemp)"
+                    
                     {
-                        echo "Votre notebook est disponible jusqu'à $(squeue -j $SLURM_JOB_ID -o '%e' -h)<br><br>"
-                        echo "Accès :<br>"
-                        echo "<a href=\"$notebook_url\">$notebook_url</a><br><br>"
-                        echo "Pour arrêter le notebook :<br>"
-                        echo "<code>scancel $SLURM_JOB_ID</code>"
-                    } > "$mail_content"
-                    send_email "$USER_MAIL" "Notebook prêt ($SLURM_JOB_NAME)" "$mail_content"
-                    rm -f "$mail_content"
+                        echo "<html><body>"
+                        
+                        echo "Votre notebook est disponible jusqu'à :"
+                        echo "<br><br>"
+                        
+                        squeue -j "${SLURM_JOB_ID}" -o '%e' -h
+                        
+                        echo "<br><br>"
+                        
+                        echo "Accès :"
+                        echo "<br>"
+                        
+                        echo "<a href=\"${NOTEBOOK_URL}\">${NOTEBOOK_URL}</a>"
+                        
+                        echo "<br><br>"
+                        
+                        echo "Pour arrêter le notebook :"
+                        echo "<br>"
+                        
+                        echo "<code>scancel ${SLURM_JOB_ID}</code>"
+                        
+                        echo "</body></html>"
+                        
+                    } > "${MAIL_CONTENT}"
+                    
+                    if send_email "${USER_MAIL}" "Notebook prêt (${SLURM_JOB_NAME})" "${MAIL_CONTENT}"; then
+                        echo "[WATCHER] Mail envoyé"
+                        
+                    else
+                        echo "[WATCHER] ECHEC ENVOI MAIL"
+                    fi
+                    
+                    rm -f "${MAIL_CONTENT}"
+                    
+                else
+                    echo "[WATCHER] .usermail vide"
                 fi
+                
+            else
+                echo "[WATCHER] Pas de fichier .usermail"
             fi
-            exit 0
+            
+            return 0
         fi
+        
+        #
+        # Notebook non prêt
+        #
+        
         sleep 1
         timeout=$((timeout - 1))
     done
-    echo "Le notebook ne s'est pas lancé dans les 60 secondes imparties ou a été interrompu de manière inattendue."
-) &
+    
+    echo "[WATCHER] Timeout notebook"
+    
+    return 1
+}
 
+#
+# Lancement watcher
+#
 
-# Lancer le conteneur
-singularity exec -B "$PWD" -B /OPT/notebooks "${SIF_FILE}" entrypoint.sh
+watcher &
+WATCHER_PID=$!
+
+echo "[MAIN] Watcher lancé (${WATCHER_PID})"
+
+#
+# Lancement notebook
+#
+
+echo "[MAIN] Lancement Singularity"
+
+singularity exec -B "$PWD" -B /OPT/notebooks "${SIF_FILE}" entrypoint.sh &
+
+CHILD_PID=$!
+
+echo "[MAIN] Notebook PID=${CHILD_PID}"
+
+#
+# Attente notebook
+#
+
+wait "${CHILD_PID}"
+RET=$?
+
+echo "[MAIN] Notebook terminé code=${RET}"
+
+exit "${RET}"
