@@ -65,6 +65,9 @@ Si votre notebook a des dépendances particulières, spécifiques à votre proje
 
 ## Préparation
 
+Dans cet exemple, l'objectif est d'installer pytorch en plus des fonctionnalités de base fournies par l'image jupyter notebook.
+L'image résultante s'appellera `pytorch.sif`.
+
 1. Charger en local l'image `/SINGULARITIES/jupyter-notebook-base.sif`, à placer dans le dossier courant avec au moins un fichier `requirements.txt` (liste de dépendances python).
 2. Créer un fichier `pytorch.def` correspondant:
    ```def
@@ -74,7 +77,7 @@ Si votre notebook a des dépendances particulières, spécifiques à votre proje
    %files
       requirements.txt /requirements.txt
    %post
-      uv pip install -U -r /requirements.txt
+      uv pip install --system -U -r /requirements.txt
    ```
 3. Compiler l'image singularity: `singularity build --force --fakeroot pytorch.sif pytorch.def`
 4. Charger sur le cluster, dans `/SINGULARITIES`, l'image résultante (ici, `pytorch.sif`)
@@ -84,7 +87,7 @@ Si votre notebook a des dépendances particulières, spécifiques à votre proje
 Une fois terminée l'étape précédente de création d'une nouvelle image dédiée, vous pouvez l'utiliser au moment de l'appel de `notebook-get`:
 
 ```bash
-notebook-get --image pytorch
+notebook-get --image pytorch --job-name "test pytorch pour $USER"
 ```
 
 Notez que la valeur `pytorch` sera résolue en `/SINGULARITIES/pytorch.sif`. Si le chemin n'existe pas, `sbatch` sera exécuté, mais le script sbatch échouera sans éxécuter singularity.
@@ -93,28 +96,24 @@ Notez que la valeur `pytorch` sera résolue en `/SINGULARITIES/pytorch.sif`. Si 
 
 ## Les dossiers requis (hard codés)
 
-Un dossier partagé en NFS, nommé `/OPT`, accessible par tous les noeuds au même chemin, avec les sous-dossiers suivants:
+- Un dossier partagé en NFS, nommé `/OPT`, accessible par tous les noeuds au même chemin, avec les sous-dossiers suivants:
+  `mkdir -p /OPT/notebooks/{batch-scripts,running,logs}`
 
-`mkdir -p /OPT/notebooks/{batch-scripts,running,logs}`
+- Un dossier partagé en NFS, nommé `/SINGULARITIES`, accessible par tous les noeuds au même chemin.
+  Ce dossier doit contenir au moins un fichier nommé `/SINGULARITIES/jupyter-notebook-base.sif`.
 
-Un dossier partagé en NFS, nommé `/SINGULARITIES`, accessible par tous les noeuds au même chemin.
-
-Ce dossier doit contenir au moins un fichier nommé `/SINGULARITIES/jupyter-notebook-base.sif`.
-
-## Les fichiers requis
-
-### Le script sbatch
+## Le fichier sbatch
 
 Dans `/OPT/notebooks/batch-scripts`, placer le fichier `notebook.sbatch` présent dans ce dossier (permissions recommandées: `root root 644`).
 
-### L'exécutable notebook-get
+## L'exécutable notebook-get
 
-C'est l'objet de ce dépôt git. Pour le configurer correctement, deux étapes simples:
+Pour installer l'exécutable, il suffit de placer le fichier compilé dans un des emplacements listés dans `$PATH`, par exemple `/usr/local/bin`.
 
 1. Compiler `notebook-get`. Commande: `./build-linux-old.sh` (permet de compiler pour des anciennes versions de glibc).
 2. Copier `./target/release/notebook-get` dans un chemin de `$PATH`. Commande: `cp ./target/release/notebook-get /usr/local/bin` (à exécuter en tant que root).
 3. S'assurer que le fichier `/usr/local/bin/notebook-get` a bien les permissions `root root 755`.
 
-### L'image singularity de base
+## L'image singularity de base
 
 Dans `/SINGULARITIES`, le fichier `jupyter-notebook-base.sif`. Pour l'obtenir, vous pouvez exécuter simplement `./notebook-build.sh`, qui va construire l'image singularity.
